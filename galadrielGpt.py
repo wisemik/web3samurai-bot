@@ -6,7 +6,6 @@ import os
 
 load_dotenv()
 
-# Загрузка переменных окружения из файла .env
 RPC_URL = os.getenv('RPC_URL')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 CONTRACT_ADDRESS = os.getenv('SIMPLE_LLM_CONTRACT_ADDRESS')
@@ -18,25 +17,21 @@ if not PRIVATE_KEY:
 if not CONTRACT_ADDRESS:
     raise ValueError("Missing SIMPLE_LLM_CONTRACT_ADDRESS in .env")
 
-# Инициализация провайдера и web3
+
 web3 = Web3(Web3.HTTPProvider(RPC_URL))
 if not web3.is_connected():
     raise ConnectionError("Unable to connect to Ethereum node")
 
-# Загрузка ABI
 with open('abis/OpenAiSimpleLLM.json', 'r') as file:
     contract_abi = json.load(file)
-
-# Инициализация контракта
 contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=contract_abi)
 account = web3.eth.account.from_key(PRIVATE_KEY)
-
 
 def get_user_input(prompt):
     return input(prompt)
 
-
 def send_message_to_contract(message):
+
     nonce = web3.eth.get_transaction_count(account.address)
     txn = contract.functions.sendMessage(message).build_transaction({
         'chainId': 696969,
@@ -64,7 +59,7 @@ def get_contract_response():
         time.sleep(2)
 
 
-def getResonseFromGaladrielWithRequest(message) -> str:
+def getResponseFromGaladrielWithRequest(message) -> str:
     # chain_id = web3.eth.chain_id
     # print(f"Chain ID: {chain_id}")
     # message = get_user_input("Message ChatGPT: ")
@@ -74,6 +69,7 @@ def getResonseFromGaladrielWithRequest(message) -> str:
     receipt = wait_for_transaction_receipt(tx_hash)
     print(f"Message sent, tx hash: {receipt['transactionHash'].hex()}")
     print(f"Chat started with message: \"{message}\"")
+    time.sleep(5)
 
     response = get_contract_response()
     print("Response from contract:", response)
