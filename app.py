@@ -2,63 +2,93 @@ import asyncio
 import requests
 import os
 import re
+
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
 from galadrielGpt import getResponseFromGaladrielWithRequest
 from spider import Spider
-from telegram import Update, InputFile
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram import Bot, Dispatcher, types
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.filters.command import Command
+from aiogram import F
+from pathlib import Path
 
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
-deepgram_api_key = os.getenv("DEEPGRAM_API_KEY")
-telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-
-client = OpenAI(api_key=openai_api_key)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+session = AiohttpSession()
+bot = Bot(token=os.getenv("TELEGRAM_BOT_TOKEN"))
+dp = Dispatcher()
 
 BOT_HI_MESSAGE = "Telegram bot for summarizing text.\n"
 
 
-async def hello_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(BOT_HI_MESSAGE)
+@dp.message(Command("start"))
+async def command_start(message: types.Message):
+    await message.reply(BOT_HI_MESSAGE)
 
+@dp.message(Command("audio"))
+async def command_start(message: types.Message):
+    await message.reply_audio(audio=generate_audio("Hello, how are you?"))
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(BOT_HI_MESSAGE)
+@dp.message(Command("sing"))
+async def command_start(message: types.Message):
+    voice = get_suno_first_audio_url("Hello, how are you?", "ballade male guitae", "Vitalik")
+    await message.reply(voice)
 
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(BOT_HI_MESSAGE)
-
-
-async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.message
+@dp.message(F.text)
+async def get_text(message: types.Message) -> None:
     text = message.text
 
     url_pattern = re.compile(r'^(http|https|ftp|ftps|file|sftp)://\S+')
 
     if url_pattern.match(text):
-        mess = await message.reply_text("🔗 Fetching data from the webpage...")
+        mess = await message.reply("🔗 Fetching data from the webpage...")
         try:
             scrapedText = scrape_webpage(text)
             await mess.edit_text("🔍 Cleaning up the text...")
             cleanedText = cleanup_text_corcel(scrapedText)
+
             await mess.edit_text("✍️ Creating a summary...")
             summarizedText = summarize_text_corcel(cleanedText)
-            await message.reply_text(summarizedText)
+            await send_long_message(message, summarizedText)
+
+            await mess.delete()
+            mess = await message.reply("🎵 Creating an audio...")
+            await message.reply_audio(audio=generate_audio(summarizedText))
         except Exception as e:
             await mess.edit_text(f"❌ An error occurred: {e}")
     else:
-        mess = await message.reply_text("✍️ Creating a summary...")
+        mess = await message.reply("✍️ Creating a summary...")
         try:
             summarizedText = summarize_text_galadriel(text)
-            await message.reply_text(summarizedText)
+            await message.reply(summarizedText)
+            if "Vitailik" in text:
+                await mess.edit_text("🎵 Creating a song...")
+                voice = get_suno_first_audio_url(summarizedText, "ballade, male singer", "Vitailik")
+                await message.reply(voice)
+            else:
+                await mess.edit_text("🎵 Creating an audio...")
+                await message.reply_audio(audio=generate_audio(summarizedText))
         except Exception as e:
             await mess.edit_text(f"❌ An error occurred: {e}")
 
 
+def escape_markdown(text: str) -> str:
+    escape_chars = r'_[]*()~`>#+-=|{}.!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
+
+async def send_long_message(message: types.Message, text: str):
+    max_length = 4000
+    escaped_text = escape_markdown(text)
+    if len(escaped_text) > max_length:
+        parts = [escaped_text[i:i + max_length] for i in range(0, len(escaped_text), max_length)]
+        for part in parts:
+            await message.reply(part, parse_mode="MarkdownV2")
+    else:
+        await message.reply(escaped_text, parse_mode="MarkdownV2")
 
 def summarize_text_galadriel(text: str) -> str:
     message = ("Your are an AI assistant that helps summarize articles."
@@ -67,7 +97,6 @@ def summarize_text_galadriel(text: str) -> str:
 
     content = getResponseFromGaladrielWithRequest(message)
     return content
-
 
 def cleanup_text_corcel(text: str) -> str:
     url = "https://api.corcel.io/v1/text/cortext/chat"
@@ -106,7 +135,6 @@ def cleanup_text_corcel(text: str) -> str:
     content = data[0]["choices"][0]["delta"]["content"]
 
     return content
-
 
 def summarize_text_corcel(text: str) -> str:
     url = "https://api.corcel.io/v1/text/cortext/chat"
@@ -156,7 +184,6 @@ def summarize_text_corcel(text: str) -> str:
 
     return content
 
-
 def scrape_webpage(url: str) -> str:
     app = Spider(api_key=os.getenv("SPIDER_API_KEY"))
     scraped_data = app.scrape_url(url)
@@ -170,14 +197,48 @@ def scrape_webpage(url: str) -> str:
     crawl_result = app.crawl_url(url, params=crawler_params)
     return crawl_result
 
+def get_suno_first_audio_url(prompt, tags, title, make_instrumental=False, wait_audio=True) -> str:
+    url = 'https://suno-api-1uz1.vercel.app/api/custom_generate'
 
+    headers = {
+        'accept': 'application/json',
+        'Content-Type': 'application/json'
+    }
+
+    data = {
+        "prompt": prompt,
+        "tags": tags,
+        "title": title,
+        "make_instrumental": make_instrumental,
+        "wait_audio": wait_audio
+    }
+
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    if response.status_code == 200:
+        response_data = response.json()
+        if response_data:
+            first_audio_url = response_data[0].get('audio_url')
+            if first_audio_url:
+                return first_audio_url
+    else:
+        print(response.text)
+        return "Error generating audio"
+
+def generate_audio(text: str) -> FSInputFile:
+    speech_file_path = Path(__file__).parent / "speech.mp3"
+    response = client.audio.speech.create(
+        model="tts-1",
+        voice="alloy",
+        input=text
+    )
+    print(speech_file_path)
+    response.stream_to_file(speech_file_path)
+    voice = FSInputFile(speech_file_path)
+    return voice
+
+async def main():
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(telegram_bot_token).build()
-    app.add_handler(CommandHandler("hello", hello_command))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_text))
-
-    app.run_polling()
+    asyncio.run(main())

@@ -18,19 +18,19 @@ async def main():
       indirect_node_id=os.getenv("INDIRECT_NODE_ID")
   )
 
-  flow_inputs = {"prompt": 'Research the history of football'}
+  flow_inputs = {"prompt": 'i would like to count up to ten, one number at a time. ill start. one.'}
   worker_nodes = [Node("http://node.naptha.ai:7001"), Node("http://node1.naptha.ai:7001")]
 
-  flow = Flow(name="babyagi", user_id=naptha.user["id"], worker_nodes=worker_nodes, module_params=flow_inputs)
-  flow_run = flow.flow_run
+  flow = Flow(name="multiplayer_chat", user_id=naptha.user["id"], worker_nodes=worker_nodes, module_params=flow_inputs)
 
-  task1 = Task(name="chat_initiator", fn="chat", worker_node=worker_nodes[0], orchestrator_node=naptha.node, flow_run=flow_run)
+  task1 = Task(name="chat_initiator", fn="chat", worker_node=worker_nodes[0], orchestrator_node=naptha.node, flow_run=flow.flow_run)
+  task2 = Task(name="chat_receiver", fn="chat", worker_node=worker_nodes[1], orchestrator_node=naptha.node, flow_run=flow.flow_run)
 
   response = await task1(prompt=flow_inputs["prompt"])
 
-  # for i in range(10):
-  #     response = await task2(prompt=response)
-  #     response = await task1(prompt=response)
+  for i in range(10):
+      response = await task2(prompt=response)
+      response = await task1(prompt=response)
 
 if __name__ == "__main__":
     asyncio.run(main())
