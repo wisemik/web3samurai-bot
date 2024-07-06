@@ -6,9 +6,10 @@ import re
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
-from galadrielGpt import getResponseFromGaladrielWithRequest
+from galadriel import getResponseFromGaladrielWithRequest
 from spider import Spider
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, \
+    InputFile
 from aiogram import Bot, Dispatcher, types
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.filters.command import Command
@@ -64,13 +65,16 @@ async def get_text(message: types.Message) -> None:
         try:
             summarizedText = summarize_text_galadriel(text)
             await message.reply(summarizedText)
+            await mess.delete()
             if "Vitailik" in text:
-                await mess.edit_text("🎵 Creating a song...")
+                mess = await message.reply("🎵 Creating a song...")
                 voice = get_suno_first_audio_url(summarizedText, "ballade, male singer", "Vitailik")
                 await message.reply(voice)
+                await mess.delete()
             else:
-                await mess.edit_text("🎵 Creating an audio...")
+                mess = await message.reply("🎵 Creating an audio...")
                 await message.reply_audio(audio=generate_audio(summarizedText))
+                await mess.delete()
         except Exception as e:
             await mess.edit_text(f"❌ An error occurred: {e}")
 
