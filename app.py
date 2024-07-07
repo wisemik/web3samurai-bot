@@ -35,6 +35,10 @@ BOT_HI_MESSAGE = (
     "Commands:\n"
     "/start - Initialize the bot\n"
     "/telegram @channelname - Summarize latest messages from a Telegram channel\n"
+    "/audio [text] - Generate an audio from the provided text\n"
+    "/youtube [link] - Summarize and create audio from a YouTube video\n"
+    "/ask [query] - Get an answer from the knowledge base\n"
+    "/summary [text/URL] - Get a summary and generate an audio version\n"
     "Send a URL or text of the article - Get a summary and generate an audio version\n"
     "Enjoy the bot! 🚀"
 )
@@ -78,7 +82,7 @@ async def command_youtube(message: types.Message):
         await send_long_message(message, summarized_text)
         await mess.delete()
 
-        mess = await message.reply("🎵 Creating an audio...")
+        # mess = await message.reply("🎵 Creating an audio...")
         audio = generate_audio(summarized_text)
         await message.reply_audio(audio=audio)
         await mess.delete()
