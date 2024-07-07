@@ -6,6 +6,11 @@ import re
 from dotenv import load_dotenv
 from openai import OpenAI
 import json
+from llama_index.core import StorageContext, load_index_from_storage
+from llama_index.core.storage.chat_store import SimpleChatStore
+from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+
 
 from galadriel import getResponseFromGaladrielWithRequest
 from spider import Spider
@@ -33,6 +38,10 @@ BOT_HI_MESSAGE = (
     "Send a URL or text of the article - Get a summary and generate an audio version\n"
     "Enjoy the bot! 🚀"
 )
+base_dir = os.path.dirname(os.path.abspath(__file__))
+json_file_path = os.path.join(base_dir, 'data', 'messages.json')
+os.makedirs(os.path.dirname(json_file_path), exist_ok=True)
+
 
 @dp.message(Command("start"))
 async def command_start(message: types.Message):
@@ -77,6 +86,41 @@ async def command_youtube(message: types.Message):
     except Exception as e:
         await message.reply(f"❗ An unexpected error occurred: {str(e)}")
 
+
+@dp.message(Command("ask"))
+async def rag_response(message: types.Message):
+    documents = SimpleDirectoryReader("data").load_data()
+    index = VectorStoreIndex.from_documents(documents)
+
+    query_engine = index.as_query_engine()
+
+    original_query = message.text
+
+    response = query_engine.query(original_query)
+    print(response)
+    await message.reply(response.response)
+
+
+def load_messages(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_messages(file_path, messages):
+    with open(file_path, 'w') as file:
+        json.dump(messages, file, indent=4)
+
+
+def add_message(new_message, file_path=json_file_path):
+    # Load existing messages
+    messages = load_messages(file_path)
+    # Add the new message
+    messages.append(new_message)
+    # Save the updated messages
+    save_messages(file_path, messages)
 
 @dp.message(Command("telegram"))
 async def command_telegram(message: types.Message):
@@ -200,6 +244,10 @@ def escape_markdown(text: str) -> str:
 
 async def send_long_message(message: types.Message, text: str):
     max_length = 4000
+    new_message = {
+        "text": text
+    }
+    add_message(new_message)  # Save the message
     escaped_text = escape_markdown(text)
     if len(escaped_text) > max_length:
         parts = [escaped_text[i:i + max_length] for i in range(0, len(escaped_text), max_length)]
